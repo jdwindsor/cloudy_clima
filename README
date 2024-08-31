@@ -1,0 +1,189 @@
+This is the "readme" file for the cloudy-CLIMA model from DOI 10.3847/PSJ/acbf2d
+
+Most climate model parameters are located in the files 'CLIMA/IO/input_clima.dat' 
+and 'CLIMA/IO/mixing_ratios.dat'. 
+
+
+
+
+
+To run the cloudy-CLIMA model:
+
+1.) compile: $ make clean -f ClimaMake
+			 $ make -f ClimaMake
+2.)	to run the climate model:$ ./Clima.run
+
+
+
+
+
+
+
+
+
+There are a number of useful cloudy-CLIMA results printed to the terminal. 
+All of these (and many more) are saved in text files for each timestep in the CLIMA/IO directory.
+
+Temperature (K)    Optical Depth SOL         Altitude (km)
+
+rg(um)             CLIMA MMR(g/g)            reff(um)
+
+qc(g/g)            qt(g/g)                   ndz(n/cm^3)
+
+
+
+TIME STEP = N
+
+
+  eddysed(): condensing gas = H2O       
+  condensate path =    4107.58661323703       g/m^2
+  liquid path =    28373.3674426785       g/m^2
+
+
+-------------------- input_clima.dat readme ------------------------------------------
+*NSTEPS : number of steps the model will run. If you've run the photochemical model,
+	you know that it runs until convergence happens.  Clima is different: YOU
+	specify how many steps it will take and then YOU check the output files
+	to see if it has converged.
+*IMW : type of water profile in the atmosphere. They are:
+        0 - saturated troposphere (good for hot atmospheres)
+	1 - Manabe/Wetherald fixed relative humidity 
+	2 - M/W with constant stratospheric H2O content and empirical troposphere H2O (start with this if you're unsure)
+	3 - dry adiabat (good for atmospheres without a lot of water in them)
+*RSURF : surface relative humidity (set to 0.8 if you're unsure)
+*ZY : solar zenith angle (0 is straight overhead; set to 60 if unsure, 
+      that approximates average flux at quadrature)
+*DTAU0: OPTICAL DEPTH STEP IN SUBLEVEL INTEGRATION (somebody else explain this?)
+*ZCON: ARBITRARY CONSTANT ADDED TO Z TO KEEP IT POSITIVE
+*P0: lowest pressure at the top of the grid (bars)
+*PGO: pressure at ground level (bars). Note that if ICOUPLE=1 (see below), it will read this in		
+      from the photochemical model regardless of what you set here.
+*G: gravitational acceleration (cm/s^2)
+*FAC:  RATIO OF GRID SPACING AT TOP TO SPACING AT BOTTOM (set to 4 if unsure)
+*IO3: Set to 1 if you want to include ozone, 0 if not
+*IUP: This sets clima's initial conditions.  Unlike Photo, clima does not *require*
+      you to give it initial conditions. If you set IUP to 1, it will generate its own
+      initial conditions and start a new run from scratch.  If IUP = 0, it will read
+      in the contents of TempIn.dat as its initial conditions. (clima generates TempOut.dat
+      after each run.  Copy that file to TempIn.dat if you want to use it as your ICs)
+*TG0: If you set IUP=1 (new run from scratch), set an initial surface temperature here (try something between 270-300 K if unsure)
+*TSTRAT: Stratospheric temperature for IUP=1 (try 200 K if unsure)
+*STARR: The type of star your planet is orbiting.  There is a WHOLE SYSTEM of stellar naming in the model
+        allowing you to create just about any type of star you want! Note that quotes around the star name
+	are necessary. NOTE: Model ignores what you have here if ICOUPLE = 1 (see below) and reads this in from
+	the photochemical model.
+	* "sun" is the sun.  Easy.
+	* You can also select "F2V", "K2V", "G2V", "ADLEO"
+	* But if you want stars besides the sun, I recommend you use this system implemented
+	 by Ravi and Ramses:
+	  Stars after first 4 written in following manner: 
+	  The first letter are the Metallicities A,B,and C. These correspond to -0.5,+0.0, and +0.5, respectively. 
+	  The middle two numbers (30, 35, 40, 45, and 50)are logg. These correspond to 3.0, 3.5, 4.0, 4.5, and 5.0, respectively. 
+	  The final two numbers are the temperatures, 26 to 72, which correspond to 2600 to 7200K.'
+	  For example, "B5034" would be an m dwarf.  "B5050" would be a K2V star.  "B4070" would be an F2V star.
+	 Using this system of stellar naming seems to produce more stable results than the "F2V", etc stars (not including
+	 the "sun".  that one is ok)
+*ICONSERV: ok, this one is important, and you may need to tweak this parameter
+	   depending on your specific model run's behavior.  
+	   0: a looser, faster, non-strict time-stepping method.  This typically
+	      results in bigger initial temperature jumps (so, don't be alarmed
+	      if your temperature suddenly jumps to 320 K from starting at ~280 K.
+	      It will fall back down if it's supposed to be cooler...). 
+	   1: A strict energy conservation method. The energy in each layer is conserved.
+	   * A few notes: If you are  doing some kind of "weird" atmosphere and start getting NaNs,
+	      or the model refuses to ever converge, if you have ICONSERV =0, try setting it to 1.
+	      If you find that your atmospheric temperatures are HARDLY changing at all from the
+	      initial conditions (but you think it should be) and ICONSERV = 1, try setting it to 0.
+	   * A useful trick: Do an initial run with the model using IUP = 1 and ICONSERV = 0.
+	     Then copy TempOut.dat to TempIn.dat, change IUP to 0, and change ICONSERV = 1.
+*ICOUPLE: 0 to turn off coupling / 1 to turn on coupling
+                NOTE: the model will output coupling files for photo regardless
+		 of whether this is on or off!  This was done intentionally because
+		 you may need to run clima uncoupled first to generate an initial atmospheric
+		 state to feed to photo in coupling mode.
+*SRFALB: surface albedo. 0.32 reproduces modern Earth's average temperature. What you are doing here
+	 is "painting the clouds on the surface". Ignore any notes about it being 0.2 in input_clima.dat.
+	 That's for an older version of the model.
+*SOLCON: Your solar constant (1 = 1x modern day solar flux). Note that if the model is coupled, 
+	 it will read this in from what Photo tells it no matter what you set here.
+*dtmax:  Maximum time step in seconds  
+*CO2MAX: hmmm...not sure if this is relevant anymore.  But it is "Maximum CO2 mixing ratio 
+	 that RRTM can manage with accuracy, for greater values of CO2 the former IR subroutine is used."
+	 (if unsure use 3.55e-2)
+*IMET: 1 = Turn methane on (slows things down)/ 0 = turn methane off. Leave at 0 if your atmosphere
+           does not have a lot of methane or the model will be sloowwww....
+*IMETETH: 1 = Turn methane+ethane on (slows things down a LOT)/ 0 = turn methane+ethane off
+	  Goes without saying, do not turn this on unless you have a lot of ethane and methane 
+	  or the model will be REALLY slow
+*nga: number of gases in your model. 
+*IHAZE: Turn haze on or off
+*monsize: still a work in progess, but this will eventually let you 
+	  choose different monomer sizes for fractal hazes. 
+	  Monsize = 0 is the only one guaranteed to work right now.
+	  0: 0.05 um monomers
+	  1: 0.01 um monomers
+	  2: 0.02 um monomers
+	  3: 0.07 um monomers
+	  4: 0.10 um monomers
+	  Change from 0 at your own risk...
+*icealbedo: a nice little ice-albedo parameterization from
+	    Benjamin Charnay that will iteratively update the 
+	    surface albedo based on your temperature to simulate
+	    ice-albedo feedbacks.  This is still fairly new and
+	    so testing/feedback is welcome.
+*INVERSE: oh boy...This turns on the inverse model if you set it to 1.  
+	  The inverse model is this:
+	  You specify a surface temperature, and the model runs for ONE timestep (you 
+	  set this: NSTEPS=1!) and spits out the solar/thermal fluxes necessary to get that
+	  temperature.  Don't attempt to turn coupling on if you do this.
+	  Also doesn't seem to be working with hazes...
+	  This is how Ravi did his habitable zone calculations.  Basically, it forces
+	  the code to skip its climate calculations loop because YOU are the one
+	  setting the temperature.  It's super quick to run since it's one timestep.
+*FRAK: 0 = spherical hazes/1 = fractal hazes
+       Model ignores what you have here and read in from the photochemical
+       model if you have ICOUPLE = 1
+
+doEddy=    .true.       !Use EddySed for Cloud calculation
+fcloud=     1.0         !0.41555         !Fractional Cloud Cover
+kz_min=     100000.0    !Minimum eddydiffusivity
+Crainf=     3.0         !Standard rainf = 3.0
+Csig=       2.0         !Standard Sig =2.0 !1.7 worked really well for current model
+supsat=     0.0         !Standard supsat=0.0
+upatm_mix=  4e-08       !minimum Coldtrap water mass mixing ratio, see Kopparapu et al. 2013 for rough values
+fc_minf=    0.01        !minimum fraction for FC for upper atmosphere.
+
+
+
+
+----------------- mixing_ratios.dat readme ----------------------------------
+(Same from prevois README file)
+
+Here you get to tell Clima what's in its atmosphere!  Note that if coupling
+is turned on, the photochemical model automatically generates this for Clima
+in the top-level directory COUPLE folder, and CLIMA will read that version in!
+
+Set the mixing ratios of your gases in this file. 
+The tropopause layer is an initial guess for where to set the tropopause.
+(try 22 if unsure)
+
+***SUPER IMPORTANT NOTE!!!***
+In the climate model’s mixing_ratio.dat file the way the code treats condensibles and noncondensibles is different. 
+If I wanted to make a 95% CO2, 5% H2 atmosphere I would set CO2 to 0.95 and H2 to 1 because H2 is 100% of the noncondensibles.
+Or, e.g. if you had 99% N2 an 1% CO2 you would set CO2 to 0.01 and N2 to 1 
+(text courtesy of Natasha Batalha)
+
+The model's condensibles are CO2 and H2O, but CO2 is the only one set in this file because the water
+mixing ratio is calculated by the model. So, basically, CO2 + H2O = 1 (again, H2O is not set in this file)
+and everything also adds to 1.
+
+***NOTE ON nitrogen dioxide***
+This doesn't work and will make the model crash.  Keep its mixing ratio tiny (<1e-60)
+
+
+
+
+
+
+
+

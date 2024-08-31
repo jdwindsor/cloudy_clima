@@ -1,0 +1,5 @@
+Optical constants for all 6 clouds species were re-calculated in mid December, 2005.  
+Previously, Mark's Mg2SiO4 files were bad.  ALL of Jonathan's, save NH3, were bad.  The reason 
+for Mark's problem was unclear.  Jonathan discovered that only one .mieff file can be created at 
+a time, otherwise, everything after the first one is somehow messed up.  The .refrind files were 
+compared to the optical constants (real data) and the match was excellent.
