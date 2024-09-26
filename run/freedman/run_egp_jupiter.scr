@@ -1,0 +1,32 @@
+99.             Internal temperature (K)
+24.8            Surface gravity (m/s**2)
+60              Level of initial R-C boundary
+0.01            Surface albedo
+0.5             Metallicity
+0               Lower boundary condition (0=diffuse : 1=solid)
+'freedman/m+0.5_co1.0/full_abunds'
+'freedman/m+0.5_co1.0/binary_data'
+T               Generate new pressure grid?
+1.e-4           Minimum new grid pressure (bar)
+100.            Maximum new grid pressure (bar)
+180.            New grid temperature (K)
+T               Include solar fluxes?
+'input/stars/wmo_solar_spectrum.dat'
+1046            Lines in solar file
+5.2             Distance (au)
+F               Use a stellar blackbody?
+2800.           Stellar Teff (K)
+1.              Stellar radius (Rsun)
+T               Do clouds?
+T               Do holes?
+F               Do Saumon?
+F               Use DISORT?
+0.50            Hole fraction, fhole
+3.              Sedimentation efficiency, fsed
+1.e5			Minimum eddy diffusivity (cm**2/s)
+2               Number of condensible species
+T               Do optics?
+T               Read Mie data?
+F               Read initial cloud profiles?
+H2O
+NH3

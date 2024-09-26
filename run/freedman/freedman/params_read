@@ -1,0 +1,47 @@
+c     PARAMETER FILES
+c     Sep 13 2012: for latest 1060 layer model: lower pressures all filled in at all Temps
+
+      parameter(max_pc=18,max_tc=60,max_layer=1060)  !old layers ; increase number
+c this has to have the right number of elements. Do not pad.      
+c it has to match the input for the kcoeffs. Expand both if needed.
+c       parameter(max_pc=18,max_tc=70,max_layer=1300)
+
+      parameter (max_elements=35)   ! needs to be exact
+                                    ! eq to the array size used for the K-coeff (me-35,kerry-26)
+                                    ! not eq to n_species!
+                                    ! does not include alkali abundances [these are in mean mol wt file]
+                                    ! we have 28 molecules ; does not include alkali
+
+
+c     This is only for molecules used in my line by line calculations
+      parameter (max_mol_used = 26) ! this is for the read-in file !16
+
+      parameter (max_windows = 200) ! should be enough - pick up from count 
+                                    ! of windows on first file used
+
+      parameter (ngauss = 8)        ! could increase - refer to "gauss" data
+                                    ! [maximum in "gauss" tables is 16 - but
+                                    ! 8 should be enough for any real case]
+                                    ! this would allow a maximum of 16 pts for
+                                    ! a divided interval
+
+      real min_log
+c     parameter (min_log = -160.)   ! use for "missing" [empty] windows - better
+                                    ! than smallest possible number ?
+                                    ! currently set in Kcoeff file
+
+c     Maxiso is the current maximum # of isotopes for any molecule
+c     PARAMETER (NTMOL=60,NSPECI=160,MAXMOL=60,MAXISO=8) ! not currently used
+
+      parameter (max_gauss =    16)   ! current maximum number of gauss 
+                                      ! divisions in one section of dave 
+                                      ! colburn's special gauss division scheme
+
+                                      ! total number in region (0.0 - 1.0)
+
+      parameter (max_gauss2 = 2*max_gauss)
+      integer file_in
+      parameter (file_in=70) ! NOTE: I have set the file number to 70 for both input files
+                             ! if this conflicts with something in your program just change the
+                             ! parameter statement #
+

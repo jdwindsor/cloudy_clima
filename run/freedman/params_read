@@ -1,0 +1,3 @@
+C	PARAMETER FILES
+
+	parameter (max_mol_used = 26) ! this is for the read in file !16
