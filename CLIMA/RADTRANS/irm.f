@@ -1,6 +1,6 @@
 
 
-      SUBROUTINE IRM(T,PF,P,FNC,CGAS)
+      SUBROUTINE IRM(T,PF,P,FNC,FNC_cloudy,CGAS,CGAS_cloudy)
 c
 c jfk 6/27/08 The call sequence now contains both PF and P. This was
 c     being done incorrectly before, because PF was being converted
@@ -11,7 +11,9 @@ c  This subroutine calculates the infrared flux
 c  This subroutine contains CH4
 
       INCLUDE 'CLIMA/INCLUDE/header.inc'
+      include 'globals.h'
       PARAMETER (NF=55,NGS=8, IK=8)
+      PARAMETER(NSOL = 38)
       PARAMETER(NS=3, NS1=NS+2, NS4=NS+5)
 C new common block, von Paris, 21/04/2006
       COMMON/IRDATA/WEIGHTCH4(6),xkappa(3,12,NF,8), ! weightch4 is for methane 3/20/2012
@@ -24,7 +26,25 @@ c-rr !3/23/11 put CIA matrix in IRDATA
       COMMON/HYDCIA/ H2H2CIA(6,55), H2H2FIN(ND,55) ! c-rr 7/02/2012 H2-H2 CIA coefficients from Borysow et al. 
       COMMON/OXYCIA/O2O2CIA(15,55), O2O2FIN(ND,55) ! c-rr 6/17/2012 O2-O2 CIA coefficients from HITRAN CIA database
       COMMON/IRBLK/FUPIR(ND),FDNIR(ND),SRFALBIR,OMG0AIR(NF,ND-1),
-     & ASYAIR(NF,ND-1),IO3,QEXTIR(NF,ND-1)
+     & ASYAIR(NF,ND-1),IO3,QEXTIR(NF,ND-1),FUPIR_cloudy(ND),
+     & FDNIR_cloudy(ND),FUPIR_clear(ND),FDNIR_clear(ND) !JDW
+
+      common/eddyblok/eddyopdIR(NF,MAXNZ), eddyw0IR(NF,MAXNZ),
+     & eddyopdSOL(NSOL,MAXNZ),eddyw0SOL(NSOL,MAXNZ),
+     & eddyg0SOL(NSOL,MAXNZ),
+     & eddyg0IR(NF,MAXNZ),eddyqt(MAXNZ,MAXNGAS),eddyqc(MAXNZ,MAXNGAS),
+     & JCOLD
+      common/smart_optics/sngas,sgas_name,snwave,swave,snrad,sradius,sdr   !added for the clima outputs.
+     & ,sqscat,sqext,scos_qscat
+
+
+
+      common/cinputs/doEddy,doCloud,fcloud,kz_min,Crainf,Csig
+     &,supsat,nsub_max,cld_hum1,clr_hum1,new_relhum(ND)
+
+
+
+
 c     COMMON/CBLOK/FO2,FN2,FCO2,FAR,FCH4,
          COMMON/CBLOK/FO2,FN2,FCO2,FAR,FCH4,FC2H6,FNO2,FI(NS1,ND),
      &   FH22,FI_cloudy(NS1,ND)
@@ -44,7 +64,8 @@ c     corrected.)
      &          MSH1(ND), 
      &          MSH(ND), FXH(ND), FNC(ND),MSO(ND),FXO(ND), 
      &          MSO1(ND), MSHH(ND), MSHH1(ND), FXHH(ND)
- 
+     
+      dimension FNC_cloudy(ND)
 
 c     DIMENSION AV(NF)
 c      DIMENSION P(ND),BPLANCK(ND),CPR(NF),TPR(NF),TPRIND(ND), 
@@ -56,12 +77,28 @@ c     & xkappa(8,12,55,8,3)
      3 FUPA(ND),FDNA(ND),T(ND),CGAS(ND,NGS),TAUCONTIN(ND), TAUH2N2(ND)  ! Added TAUH2 5/29/2012 c-rr
      4 ,TAUO2O2(ND), TAUH2H2(ND),SELF_ABSIR(NF,ND),FORN_ABSIR(NF,ND)  ! Added self and foreign broadening continuum matrices 8/30/2012
 
+           Dimension CGAS_cloudy(ND,NGS),TAUGH2O_cloudy(ND),TAUGIR_cloudy(ND)
+     & ,TAUSIR_cloudy(ND-1),TAUASIR_cloudy(ND-1),TAUAEXTIR_cloudy(ND-1)
+
+
+      Dimension FUPA_cloudy(ND),FDNA_cloudy(ND),FUPA_clear(ND),
+     & FDNA_clear(ND),FDN_clear(ND),FDN_cloudy(ND),
+     & FUP_clear(ND),FUP_cloudy(ND) !JDW add a bunch of dimensions.
+
+
       REAL KAPPALAYER(NF,IK,3,ND),kappa(55,6),KAPPALAYEROZ(8,ND), ! redimensioned KAPPALAYER and kappa for CH4 3/21/2012
-     2 WEIGHTOZC(8),KAPPAOZC(8),TAUGOZ(ND), ! EWS variables, TAUCONTINT(NF), CNUT not used
+     2 WEIGHTOZC(8),KAPPAOZC(8),TAUGOZ(ND), ! EWS - variables TAUCONTINT(NF), CNUT not used
      3 TAUTOTAL(NF),TRANSLAYER(ND),TWGHTT(8),OMG0IR(ND-1),ASYIR(ND-1),
-     4 TAULAMIR(ND-1),TAUAEXTIR(ND-1),TAUASIR(ND-1),TAUSIR(ND-1)
+     4 TAULAMIR(ND-1),TAUAEXTIR(ND-1),TAUASIR(ND-1),TAUSIR(ND-1),
+     &  ASYEDDY(ND-1),OMG0EDDY(ND-1),TAUEDDY(ND-1)  !JDW
+
+      real TAULAMIR_cloudy(ND-1),TAULAMIR_clear(ND-1)
+      real ASYIR_cloudy(ND-1),ASYIR_clear(ND-1)
+      real OMG0IR_cloudy(ND-1),OMG0IR_clear(ND-1)
+
       REAL KAPPALAYERC2H6(NF,6)
       REAL DPLYR(ND), PLAYR(ND), CRAY(ND), TAUR(ND)
+      REAL TAUR_cloudy(ND)
       DATA HP,SIGMA/6.63E-27, 5.67E-5/
       DIMENSION WEIGHTC2H6(6),CGASC2H6(ND)
       DIMENSION TAUGC2H6(ND)
@@ -310,8 +347,14 @@ c-------------------------------
       ENDDO
 c       PRINT*, T,P
        DO 99 I=1, ND
-        FUPIR(I) = 0.
-        FDNIR(I) = 0.
+            FUPIR(I) = 0.
+            FDNIR(I) = 0.
+    
+            FUPIR_cloudy(I) =0. !JDW
+            FDNIR_cloudy(I) =0.
+    
+            FUPIR_clear(I) =0.
+            FDNIR_clear(I) =0.
  99   CONTINUE
        DO I=1,55
          TAUTOTAL(I) = 0.0
@@ -325,6 +368,7 @@ c       PRINT*, T,P
 ****** Loop over frequency      
        DO 1 I=1, NF
                    AL2   =  (1E4*(C/AV(I)))**2   ! wavenumber 
+                   AL2_cloudy=(1E4*(C/AV(I)))**2   ! wavenumber 
                    VAC = AV(I)
        DO 20 J=1,ND 
 C-jdh  VAC = C*AV(I)
@@ -336,11 +380,24 @@ C-jdh  VAC = C*AV(I)
        BPLANCK(J) = PLANCK(VAC,T(J),HP,C,HK)
   20   CONTINUE
        DO 15 J=1,ND
-         FUPA(J) = 0.0
-         FDNA(J) = 0.0
-         FUP(J) = 0.0
-         FDN(J) = 0.0
-         TRANSLAYER(J) = 0.0 
+         !FUPA(J) = 0.0
+         !FDNA(J) = 0.0
+         !FUP(J) = 0.0
+         !FDN(J) = 0.0
+            TRANSLAYER(J) = 0.0 
+
+            FUPA_cloudy(J)=0.0
+            FDNA_cloudy(J) =0.0
+   
+            FUP_cloudy(J) =0.0 !JDW
+            FDN_cloudy(J) =0.0
+   
+            FUPA_clear(J)=0.0
+            FDNA_clear(J) =0.0
+   
+            FUP_clear(J) =0.0
+            FDN_clear(J) =0.0
+   
   15   CONTINUE
 ****** AEROSOLS
 
@@ -500,8 +557,15 @@ c 4444        format(1p3e14.5,2(2x,i3)) !EWS - label not used
         DO 11 IL = 1,NLAYERS
          PPE = (1. + 0.3*FI(2,IL))*P(IL)     !CO2
          TPE = (300./T(IL))**TPR(I)
-         
-         TAUGH2O(IL) = KAPPALAYER(I,K1,1,IL)*CGAS(IL,6)
+      !    print*,'made it to TAUGh2O'
+      !    print*,KAPPALAYER(I,K1,1,IL)*CGAS(IL,6)
+      !    print*,ND,IL
+         TAUGH2O(IL) = KAPPALAYER(I,K1,1,IL)*CGAS(IL,6)!CGAS_cloudy acting strange
+         !print*,'TAUGH2O+1',TAUGH2O(IL)
+         !print*,'CGAS',CGAS(IL,6)
+
+         TAUGH2O_cloudy(IL)=KAPPALAYER(I,K1,1,IL)*CGAS(IL,6)!CGAS_cloudy(IL,6)
+
          TAUGCO2(IL) = KAPPALAYER(I,K2,2,IL)*CGAS(IL,5)
 
 !           IF ((I.gt.14).and.(I.lt.21))TAUGH2O(IL) = 1.e-60 ! zeroing out HITRAN coefficients
@@ -694,6 +758,11 @@ c        TPRIND(IL) = 0
      &                 + TPRIND(IL)+
      &                TAUH2N2(IL)+TAUCONTIN(IL)+TAUGC2H6(IL)+ 
      &                TAUO2O2(IL)+TAUH2H2(IL)
+      !print*,'TAUGH2O',TAUGH2O(IL)!TAUGH2O is zero. Bad! JDW
+
+       TAUGIR_cloudy(IL)=TAUGH2O_cloudy(IL)+TAUGCO2(IL)+TAUGCH4(IL)
+     & + TPRIND(IL)+TAUH2N2(IL)+TAUCONTIN(IL)+TAUGC2H6(IL) + 
+     & TAUO2O2(IL) + TAUH2H2(IL)
 
 !          print 2222,TAUGH2O(IL),TAUGCO2(IL),IL,K1,K2
 !           if ((K1.eq.1).and.(I.eq.1))then
@@ -757,6 +826,12 @@ c      TAUGIR(IL) =TAUGIR(IL) + TAUGOZ(IL)
      & +TAUCONTIN(IL) + TAUGOZ(IL) + TAUGC2H6(IL)+ TAUH2N2(IL)
      & + TAUO2O2(IL)+TAUH2H2(IL)
 
+
+      TAUGIR_cloudy(IL)=TAUGCH4(IL)+TAUGH2O_cloudy(IL)+TAUGCO2(IL) +      !JDW
+     & TPRIND(IL) + TAUCONTIN(IL) + TAUGOZ(IL) + TAUGC2H6(IL) 
+     & + TAUH2N2(IL)
+     & + TAUO2O2(IL) + TAUH2H2(IL)
+      !print*,'taugir',TAUGIR(IL)
 !      print *, taugir(il)
 !      call sleep(1)
         ! print *, TAUGOZ(IL)
@@ -766,25 +841,63 @@ c      TAUGIR(IL) =TAUGIR(IL) + TAUGOZ(IL)
 
       DO IL=1, NLAYERS
            Fwater = FI(1,IL) ! Needed for rayley
+           EddyFwater=FI_cloudy(1,IL) !Make this from ClimaMain
+
+
            FCO2 = FI(2,IL)  ! Needed for rayley
            FNCR = FNC(IL) ! Needed for rayley
+           EddyFNCR=FNC_cloudy(IL) !Needed for rayley !JDW Make this from ClimaMain/gascon !This is where SIGBUS occurs. 
            DPLYR(IL)=PLAYR(IL+1)-PLAYR(IL)
            AM = DM
            CONS0=6.0255E23/GNEW(IL)   ! Put constant to use for rayleigh scattering calculation in IR
            CONS=CONS0/AM
            CRAY(IL)=CONS*DPLYR(IL)
            CALL RAYLEY(SIGR, AL2,Fwater,FNCR) ! Call rayley to output SIGR at a given altitude and wavelength, inputting AL2. 5/8/2011
+           
+           
+           CALL RAYLEY(EddySIGR,AL2,EddyFwater,FNCR)! JDW added for EddySed clouds
            TAUR(IL)= SIGR*CRAY(IL)  ! SIGR is a scalar now 5/8/2011
            TAUSIR(IL) = TAUASIR(IL) + TAUR(IL)
 
+           TAUR_cloudy(IL)=EddySIGR*CRAY(IL)
 
-          TAULAMIR(IL) = TAUAEXTIR(IL) + TAUGIR(IL) + TAUSIR(IL)
+           !print*,'TAUR',TAUR_cloudy-TAUR
+           TAUSIR_cloudy(IL)=TAUASIR_cloudy(IL)+TAUR_cloudy(IL)
 
-
-          ASYIR(IL) = ASYAIR(I,IL) 
-          OMG0IR(IL) = TAUSIR(IL)/TAULAMIR(IL)
-          OMG0IR(IL) = AMIN1(OMG0IR(IL),0.99999)
-          OMG0IR(IL) = AMAX1(OMG0IR(IL),1.E-5)  ! changed lower limit of single-scattering albedo to 1e-12 (from 1.e-5) c-rr 4/30/2012
+           TAULAMIR(IL) = TAUAEXTIR(IL) + TAUGIR(IL) + TAUSIR(IL)
+           !print*,'TAUGIR',TAUGIR(IL) !TAUGIR is the problem! JDW
+           !print*,'TAULAMIR',TAULAMIR(IL) !TAULAMIR is wrong! JDW
+           TAULAMIR_cloudy(IL)=TAUAEXTIR_cloudy(IL)+TAUGIR_cloudy(IL)
+     & +TAUSIR_cloudy(IL)
+ 
+           OMG0IR_cloudy(IL) = TAUSIR_cloudy(IL)/TAULAMIR_cloudy(IL)
+ 
+           !ASYIR_cloudy(IL) = ASYAIR_cloudy(I,IL)
+ 
+ 
+ 
+ 
+           ASYIR(IL) = ASYAIR(I,IL) 
+           
+           ASYIR_cloudy(IL)=ASYAIR(I,IL)
+           !print*,ASYIR(IL)-ASYIR_cloudy(IL) !0.0 meaning they are the same. 
+ 
+           OMG0IR_cloudy(IL)=TAUSIR_cloudy(IL)/TAULAMIR_cloudy(IL)
+           OMG0IR(IL) = TAUSIR(IL)/TAULAMIR(IL)
+           OMG0IR(IL) = AMIN1(OMG0IR(IL),0.99999)
+           OMG0IR(IL) = AMAX1(OMG0IR(IL),1.E-5)  ! changed lower limit of single-scattering albedo to 1e-12 (from 1.e-5) c-rr 4/30/2012
+           OMG0IR_cloudy(IL) = AMIN1(OMG0IR_cloudy(IL),0.99999)
+           OMG0IR_cloudy(IL) = AMAX1(OMG0IR_cloudy(IL),1.E-5)
+           ASYEDDY(IL)=eddyg0IR(I,IL)
+           OMG0EDDY(IL)=eddyw0IR(I,IL)
+           TAUEDDY(IL)=eddyopdIR(I,IL)/1.  !JDW
+           !ASYIR_cloudy(IL)=ASYIR(IL) + ASYEDDY(IL)
+            ! TAUEDDY(1)=0.0
+             !TAUEDDY(IL)=1.0
+ 
+ 
+ 
+ 
       ENDDO
 
 !       print *,'k1.....',K1
@@ -799,14 +912,61 @@ c      This requires the use of PF, not P.
 !               print *, 'going into DELTATWOSTRIR', TAULAMIR(1)
 !               pause
 !                endif
-      
-      CALL DELTA2STRIR(SRFALBIR,ASYIR,TAULAMIR,OMG0IR,
-     & FUP,FDN,BPLANCK,TAUTOP, I ,K1, IL)
+      do z=1,size(ASYIR)
+
+            ASYIR_cloudy(z)=ASYIR(z) + ASYEDDY(z)
+            TAULAMIR_cloudy(z)=TAULAMIR(z) + TAUEDDY(z)
+            !IF(TAULAMIR_cloudy(z) .gt. 100.) TAULAMIR_cloudy(IL)=100.
+
+            OMG0IR_cloudy(z)=OMG0IR(z) + OMG0EDDY(z)
+            !print*,'ireddy-ir',omg0IR-omg0ir_cloudy
+            OMG0IR_cloudy(z) = AMIN1(OMG0IR_cloudy(z),0.99999)
+            !print*,OMG0IR
+            OMG0IR_cloudy(z) = AMAX1(OMG0IR_cloudy(z),1.E-5)
+
+            ASYIR_clear(z)=ASYIR(z)
+            TAULAMIR_clear(z)=TAULAMIR(z)
+            OMG0IR_clear(z)=OMG0IR(z) 
+      enddo
+      TAUTOP_cloudy = TAULAMIR_cloudy(1)*PF(1)/(PF(2)-PF(1))
+      TAUTOP_cloudy = AMIN1(TAUTOP_cloudy,1.)
+      CALL DELTA2STRIR(SRFALBIR,ASYIR_cloudy, !JDW
+     & TAULAMIR_cloudy,OMG0IR_cloudy, !Added IR to the flux names, seems to have changed. JDW
+     & FUP_cloudy,FDN_cloudy,BPLANCK,TAUTOP_cloudy, I ,K1, IL) !What probably caused this to screw up the IR stuff?
+      !print*,'fdn_cloudy',fdn_cloudy(10)
+
+
+      ! do z=1,size(asyir)
+      !       ! print*,"ASYIR",ASYIR_cloudy(z),OMG0IR_cloudy(z),z
+      ! enddo
+
+
+      !print*,'BPLANCK',BPLANCK,ASYIR_cloudy,ASYIR_clear
+      !print*,'FDN',FDN_cloudy
+      !print*,'FUP',FUP_cloudy
+      CALL DELTA2STRIR(SRFALBIR,ASYIR_clear,
+     & TAULAMIR_clear,OMG0IR_clear,
+     & FUP_clear,FDN_clear,BPLANCK,TAUTOP, I ,K1, IL)
+      !print*,'fdn_clear',fdn_clear(10)
+
 C
 
                   DO J = 1,ND
-                  FUPA(J)=FUPA(J)+TWGHTT(K4)*FUP(J)
-                  FDNA(J)=FDNA(J)+TWGHTT(K4)*FDN(J)
+                  !FUPA(J)=FUPA(J)+TWGHTT(K4)*FUP(J) !If these are commented out it gives big nan. JDW
+                  !FDNA(J)=FDNA(J)+TWGHTT(K4)*FDN(J)
+                  !print*,'twghtt',TWGHTT(K4)
+                  FUPA_cloudy(J)=FUPA_cloudy(J)
+     & +TWGHTT(K4)*FUP_cloudy(J)
+
+                  FDNA_cloudy(J)=FDNA_cloudy(J) !FDNA_cloudy is wrong. 
+     & +TWGHTT(K4)*FDN_cloudy(J)
+      !print*,'twghtt_cloudy',TWGHTT(K4)
+                  
+                  FUPA_clear(J)=FUPA_clear(J)
+     & +TWGHTT(K4)*FUP_clear(J)
+
+                  FDNA_clear(J)=FDNA_clear(J)
+     & +TWGHTT(K4)*FDN_clear(J)
                   ENDDO
                   
  
@@ -824,8 +984,10 @@ C
 
       DO IL=1, NLAYERS
            Fwater = FI(1,IL) ! Needed for rayley
+           EddyFwater=FI_cloudy(1,IL)
            FCO2 = FI(2,IL)  ! Needed for rayley
            FNCR = FNC(IL) ! Needed for rayley
+           EddyFNCR=FNC_cloudy(IL)
            DPLYR(IL)=PLAYR(IL+1)-PLAYR(IL)
            AM = DM
            CONS0=6.0255E23/GNEW(IL)   ! Put constant to use for rayleigh scattering calculation in IR
@@ -846,6 +1008,8 @@ C
 
           ASYIR(IL) = ASYAIR(I,IL) 
           OMG0IR(IL) = TAUSIR(IL)/TAULAMIR(IL)
+          ASYIR_cloudy(IL)=ASYAIR(I,IL)
+          OMG0IR_cloudy(IL)=OMG0IR(IL)
 !          if (I.eq.49) then
 !          print 23656, TAUSIR(IL), TAULAMIR(IL), OMG0IR(IL), T(IL), IL
 !            pause
@@ -854,6 +1018,8 @@ C
           
           OMG0IR(IL) = AMIN1(OMG0IR(IL),0.99999)
           OMG0IR(IL) = AMAX1(OMG0IR(IL),1.E-5)! changed lower limit of single-scattering albedo to 1e-12 (default 1e-5) c-rr 4/30/2012
+          OMG0IR_cloudy(IL)=AMIN1(OMG0IR(IL),0.99999)
+          OMG0IR_cloudy(IL) = AMAX1(OMG0IR(IL),1.E-5)
 !          if(NST==6)then
 !          print 3111,OMG0IR(IL),ASYIR(IL),real(IL),real(I)
 !          endif
@@ -895,10 +1061,50 @@ c
 c jfk  6/25/08  Include TAUTOP in the call sequence to do the upper BC
       TAUTOP = TAULAMIR(1)*PF(1)/(PF(2)-PF(1))
       TAUTOP = AMIN1(TAUTOP,1.)
+
+      do z=1,size(ASYIR)
+
+            ASYIR_cloudy(z)=ASYIR(z) + ASYEDDY(z) !This breaks the code, Like the IR treatment of the clouds is way too intense. 
+            TAULAMIR_cloudy(z)=TAULAMIR(z) + TAUEDDY(z)
+            !print*,'TAUEDDY',TAUEDDY(Z),I,IL
+            !IF(TAULAMIR_cloudy(z) .gt. 100.) TAULAMIR_cloudy(IL)=100.
+            OMG0IR_cloudy(z)=OMG0IR(z) + OMG0EDDY(z)
+            
+            OMG0IR_cloudy(z) = AMIN1(OMG0IR_cloudy(z),0.99999)
+            !print*,'ireddy-ir',omg0IR(z),omg0ir_cloudy(z)
+            !print*,OMG0IR
+            OMG0IR_cloudy(z) = AMAX1(OMG0IR_cloudy(z),1.E-5)
+            !ASYIR_cloudy(z) = AMAX1(ASYIR_cloudy(z),-0.99999)
+            !ASYIR_cloudy(z)=AMIN1(ASYIR_cloudy(z),0.99999)
+            ASYIR_cloudy(z) = AMAX1(ASYIR_cloudy(z),-0.99999)
+                  if (ASYIR_cloudy(z) .lt. 0.9999 .and. 
+     & ASYIR_cloudy(z).gt.-0.99999)then 
+                        ASYIR_cloudy(z)=ASYIR_cloudy(z)
+                  elseif (ASYIR_cloudy(z) .gt. 0.9999) then
+                        ASYIR_cloudy(z) = 0.9999
+                  elseif(ASYIR_cloudy(z) .lt. -0.99999) then 
+                        ASYIR_cloudy(z)=-0.999999
+                  endif
       
-      CALL DELTA2STRIR(SRFALBIR,ASYIR,TAULAMIR,OMG0IR,
-     & FUP,FDN,BPLANCK,TAUTOP,I, K1,IL)
-     
+      
+                  ASYIR_clear(z)=ASYIR(z)
+                  TAULAMIR_clear(z)=TAULAMIR(z)
+                  OMG0IR_clear(z)=OMG0IR(z) 
+            enddo
+
+            TAUTOP_cloudy = TAULAMIR_cloudy(1)*PF(1)/(PF(2)-PF(1))
+            TAUTOP_cloudy = AMIN1(TAUTOP_cloudy,1.)
+      
+            TAUTOP_cloudy=TAUTOP
+
+
+      CALL DELTA2STRIR(SRFALBIR,ASYIR_cloudy, !JDW It's something to do with these optical properties. JDW
+     & TAULAMIR_cloudy,OMG0IR_cloudy,           !Here it it the cloudy optical depth JDW
+     & FUP_cloudy,FDN_cloudy,BPLANCK,TAUTOP_cloudy, I ,K1, IL)
+      
+      CALL DELTA2STRIR(SRFALBIR,ASYIR_clear,
+     & TAULAMIR_clear,OMG0IR_clear,
+     & FUP_clear,FDN_clear,BPLANCK,TAUTOP, I ,K1, IL)
 C
 C
  
@@ -909,8 +1115,18 @@ C
 
 
                    DO J = 1, ND
-                  FUPA(J)=FUPA(J)+TWGHT*FUP(J)
-                  FDNA(J)=FDNA(J)+TWGHT*FDN(J)
+                  !FUPA(J)=FUPA(J)+TWGHT*FUP(J) !Commenting this one out doesn't give nan. 
+                  !FDNA(J)=FDNA(J)+TWGHT*FDN(J)
+                  
+                  FUPA_cloudy(J)=FUPA_cloudy(J)
+     & +TWGHT*FUP_cloudy(J)
+                  FDNA_cloudy(J)=FDNA_cloudy(J)
+     & +TWGHT*FDN_cloudy(J)
+
+                  FUPA_clear(J)=FUPA_clear(J)
+     & +TWGHT*FUP_clear(J)
+                  FDNA_clear(J)=FDNA_clear(J) !JDW
+     & +TWGHT*FDN_clear(J)
 !                  if( (NST==6) .and. (J<30) .and. (K1==1))then
 !                  PRINT 3321,TWGHT,FUP(J),FDN(J),real(J)
 !                  endif
@@ -932,12 +1148,24 @@ c  5     CONTINUE  ! ETHANE !EWS - label not used
 3111     FORMAT(1P5E14.5)
 
          DO 14 J=1,ND
-             FDNIR(J)=FDNIR(J)+W(I)*FDNA(J)
-             FUPIR(J)=FUPIR(J)+W(I)*FUPA(J)
+             !FDNIR(J)=FDNIR(J)+W(I)*FDNA(J)
+             !FUPIR(J)=FUPIR(J)+W(I)*FUPA(J)
+
+
+             FDNIR_cloudy(J)=FDNIR_cloudy(J)+
+     $ W(I)*FDNA_cloudy(J)
+             FUPIR_cloudy(J)=FUPIR_cloudy(J)+
+     $ W(I)*FUPA_cloudy(J)
+            !print*,'FDNA_clear(J)',FDNA_clear(J),FDNIR_clear(J)
+             FDNIR_clear(J)=FDNIR_clear(J)+
+     & W(I)*FDNA_clear(J)
+             FUPIR_clear(J)=FUPIR_clear(J)+
+     & W(I)*FUPA_clear(J)
 !             PRINT 3321,W(I),FDNA(J),FUPA(J),real(J),real(I)
     
                  if (j.eq.1) then
-              write(6969, *) FUPA(j), FDNA(j), I,NST
+            write(6969, *) (1.-fcloud)*(FUPA_clear(j))+fcloud*FUPA_cloudy(J),
+     & (1.-fcloud)*FDNA_clear(j)+fcloud*FDNA_cloudy(j), I,NST
                   endif
 
 c 3131          format(1p2e14.5,2(2x,i3)) !EWS - label not used
@@ -947,7 +1175,8 @@ c 3131          format(1p2e14.5,2(2x,i3)) !EWS - label not used
 !               endif
 
              IF (J.eq.1) THEN
-             write(90, *)AV(I)/C,ABS(FDNIR(J) - FUPIR(J)) ! Outgoing IR at top of atmosphere   
+             write(90, *)AV(I)/C,ABS((1.-fcloud)*FDNIR_clear(J) + fcloud*FDNIR_cloudy(J)
+     & - (1.-fcloud)*FUPIR_clear(J) -fcloud*FUPIR_cloudy(J)) 
              ENDIF
 c-jdh uncomment to get band-by-band fluxes            
 c             IF (J.EQ.1) THEN

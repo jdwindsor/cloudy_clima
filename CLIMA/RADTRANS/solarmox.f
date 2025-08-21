@@ -1,4 +1,4 @@
-      SUBROUTINE SOLARMOX(TF,LAST,FNC,NST)
+      SUBROUTINE SOLARMOX(TF,LAST,FNC,FNC_cloudy,NST)
 C  Add NO2 to the mix of gases
 C
 C  FORMERLY TOM ACKERMANS SOLAR ROUTINE 'RADRIV'. ALL SUBROUTINES UNDER
@@ -13,6 +13,7 @@ C PF1
 c  This subroutine contains CH4
 
       INCLUDE 'CLIMA/INCLUDE/header.inc'
+      include 'globals.h'
       PARAMETER (NSOL=38,NGS=8,NF=55, IK=8)  !c-rr Adding IK=8, number of sums for CO2 and H2O absorption coefficients 8/27/2012
       PARAMETER(NS=3, NS1=NS+2, NS4=NS+5) ! Adding parameter statement needed for FI(NS1,ND) 5/23/2011
       REAL kmatrix_solh2o, kmatrix_solco2, weights, KAPPALAYERSOL_CO2,
@@ -23,9 +24,31 @@ C
      &  ASYA(NSOL,ND-1),TAUAER(NSOL),SIGERT(NSOL),FMA(NSOL),PF(ND),
      &  ALAMBDA(NSOL),CGAS(ND,NGS),FUPSOL(ND),FDNSOL(ND),
      &  NGAS(2,NSOL),WGHT(4,2,NSOL),NPR(2,NSOL),SOLINT(NSOL),
-     &  TAULAM(ND-1),ASY(ND-1),OMG0(ND-1),FMT(ND-1),QEXT(NSOL,ND-1)
+     &  TAULAM(ND-1),ASY(ND-1),OMG0(ND-1),FMT(ND-1),QEXT(NSOL,ND-1),
+     &  fdnsol_cloudy(nd),fupsol_cloudy(nd),
+     &  fdnsol_clear(nd),fupsol_clear(nd),ASY_cloudy(ND-1),
+     &  OMG0_cloudy(ND-1),TAULAM_cloudy(ND-1),
+     &  ASY_clear(ND-1),OMG0_clear(ND-1),TAULAM_clear(ND-1),
+     &  ASYEDDY(ND-1),OMG0EDDY(ND-1),TAUEDDY(ND-1),CGAS_cloudy(ND,NGS)
+     &  ,relhum_eddy_july(nd) !JDW  !JDW  !JDW
 
-        COMMON/DATASOLAR/weightco2_h2oSOL(8), weights(3,NSOL,IK)   ! new common block for weights and interpolated coefficients for CO2, H2O, and methane. 8/26/2012
+
+      common/eddyblok/eddyopdIR(NF,MAXNZ), eddyw0IR(NF,MAXNZ),
+     & eddyopdSOL(NSOL,MAXNZ),eddyw0SOL(NSOL,MAXNZ),
+     & eddyg0SOL(NSOL,MAXNZ),
+     & eddyg0IR(NF,MAXNZ),eddyqt(MAXNZ,MAXNGAS),eddyqc(MAXNZ,MAXNGAS),
+     & JCOLD
+
+
+
+
+      common/cinputs/doEddy,doCloud,fcloud,kz_min,Crainf,Csig
+     &,supsat,nsub_max,cld_hum1,clr_hum1,new_relhum(ND)
+
+      common/eddycloud_optics/pkw
+      
+      
+       COMMON/DATASOLAR/weightco2_h2oSOL(8), weights(3,NSOL,IK)   ! new common block for weights and interpolated coefficients for CO2, H2O, and methane. 8/26/2012
      
 
 
@@ -66,7 +89,35 @@ c     COMMON/CBLOK/FO2,FN2,FCO2,FAR,FCH4
      &  CRAY(ND-1),DPLYR(ND-1),PLAYR(ND),PMID(ND-1),
      &  FUP(ND),FDN(ND),FUPA(ND),FDNA(ND),ALPHACH4(4,38),
      &  BETACH4(4,38),TAUEXT(ND-1),TAUEXTID(ND-1),GAMMACH4(38)
+
+
+
+
+
+
+      Dimension TAUAS_cloudy(ND-1),TAUS_cloudy(ND-1),
+     & TAUR_cloudy(ND-1),TAUEXT_cloudy(ND-1),TAUEXTID_cloudy(ND-1),
+     & TAUCONTSOL_cloudy(ND),taug_cloudy(ND-1)
+
+
+      Dimension FUP_cloudy(ND),FDN_cloudy(ND),FUPA_cloudy(ND),
+     & FDNA_cloudy(ND)
+
+      Dimension FUP_clear(ND),FDN_clear(ND),FUPA_clear(ND),
+     & FDNA_clear(ND)
+
+      Dimension TAULAM_clear_arr(ND-1,NSOL),
+     & TAULAM_cloudy_arr(ND-1,NSOL),
+     & ASY_clear_arr(ND-1,NSOL),ASY_cloudy_arr(ND-1,NSOL),
+     & OMG0_clear_arr(ND-1,NSOL),OMG0_cloudy_arr(ND-1,NSOL) 
+
+
+
       DIMENSION TF(ND),Fdiff(ND),SolHeat(NSOL,ND), PF1(ND)
+      
+      
+      
+      
       DIMENSION FNC(ND), KMATRIX_SOLH2O(NSOL,IK), 
      &  KMATRIX_SOLCO2(NSOL,IK),self_absol(NSOL,ND),  
      &   forn_absol(NSOL,ND),  ! Added self and foreign water continuum solar coefficients 8/30/2012 c-rr
@@ -77,10 +128,13 @@ c     COMMON/CBLOK/FO2,FN2,FCO2,FAR,FCH4
 c     DIMENSION W(NF), ALAM(NF), AVOLD(NF),SIGR(NSOL)
 C     DIMENSION ALAM(NF), AVOLD(NF),SIGR(NSOL)
 C
+      CHARACTER :: DIRINOUT*8,DIRDATA*10
+      COMMON/DIR/DIRINOUT,DIRDATA
+
 
        COMMON/BPS_SOL/s_absol(NSOL), f_absol(NSOL), TDsol(NSOL),  ! Added COMMON BLOCK FOR BPS CONTINUUM FOR SOLAR  8/30/2012 c-rr
      &  Bssol(NSOL), Bfsol(NSOL)
-      REAL np, SIGR,ALCH4  ! removed extraneous kappa and kmatrix 3/23/2012
+      REAL np, SIGR,ALCH4,SIGR_cloudy  ! removed extraneous kappa and kmatrix 3/23/2012
 
        DATA SOLAV/42087 ,36363 ,35087 ,32562 ,30376 ,29308 ,25641 ,
      & 22222 ,18518 ,18198 ,17649 ,16528 ,16000 ,15000 ,14470 ,13300 ,
@@ -90,7 +144,18 @@ C
 
        C2 = 1.4388 ! constant for BPS continuum (in cmK) 8/31/2012 , c-rr     
 C
+         TAULAM_clear=0.0
+         TAULAM_cloudy=0.0
+         TAULAM=0.0
 
+
+         OMG0_cloudy=0.0
+         OMG0_clear=0.0
+         OMG0=0.0
+
+         ASY_cloudy=0.0
+         ASY_clear=0.0
+         ASU=0.0
 
 C  Define the NO2 mixing ratio 
       COUNTERS = 0
@@ -133,10 +198,22 @@ c         AM = 44.*FCO2 + DM*FN2
 C
 
       DO 1152 I=1,ND
-         FUPSOL(I) = 0.0
-         FDNSOL(I) = 0.0
-         FUP(I) = 0.0
-         FDN(I) = 0.0
+         !FUPSOL(I) = 0.0
+         !FDNSOL(I) = 0.0
+         !FUP(I) = 0.0
+         !FDN(I) = 0.0
+
+         FUPSOL_cloudy(I) =0.0 !JDW
+         FDNSOL_cloudy(I) =0.0
+         FUPSOL_clear(I) =0.0
+         FDNSOL_clear(I) =0.0
+
+         FUP_cloudy(I) =0.0
+         FDN_cloudy(I) =0.0
+
+         FUP_clear(I) =0.0
+         FDN_clear(I) =0.0
+         !print*,'zeroing'
  1152 CONTINUE
       T =188
 C SELECTION OF CH4 DATA USING THE CURRENT VALUE OF TEMPERATURE
@@ -211,8 +288,52 @@ c 3456     format(1p4e14.5,3(2x,i3)) !EWS - label not used
       DO 1155 I=1,NSOL     !**BEGIN WAVELENGTH LOOP**
 
          DO 1160 J=1,ND
-            FUPA(J) = 0.0
-            FDNA(J) = 0.0
+            !FUPA(J) = 0.0
+            !FDNA(J) = 0.0
+
+            FUPA_cloudy(J)=0.0!JDW
+            FDNA_cloudy(J)=0.0
+
+            FUPA_clear(J) =0.0
+            FDNA_clear(J) =0.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
  1160    CONTINUE
  
              AL2 = ALAMBDA(I)**2  ! Took AL2 out of Rayley in order to do altitude loop and get AL2 for each individual mixing ratio.
@@ -230,30 +351,57 @@ c FI(3,J) = methane
 c The condensibles are water and carbon dioxide. Water convects for planets closer in and CO2 condenses for planets further out
 c FNC = noncondensible mixing ratio = FN2 + FO2 + FCH4 + FAR = 1 - FH20 - FCO2  5/3/2011
            Fwater = FI(1,IL) ! Needed for rayley
+           Fwater_cloudy = FI_cloudy(1,IL)
            FCO2 = FI(2,IL)  ! Needed for rayley
            FNCR = FNC(IL)  ! This is the FNC that is passed into rayley, one layer at a time  c-rr 6/7/2012
             
 c-----------------------------------------------------------------------------------------           
            CALL RAYLEY(SIGR, AL2,Fwater,FNCR) ! Call rayley to output SIGR at a given altitude and wavelength, inputting AL2. 5/23/2011
            ! 8/31/2011 removed FNC from rayley argument
+           CALL RAYLEY(SIGR_cloudy,AL2,Fwater,FNCR) !Changed from Cloudy Values JDW
            
 c           TAUR(IL)= SIGR(I)*CRAY(IL)           
         TAUR(IL)= SIGR*CRAY(IL)  ! SIGR is a scalar now 5/23/2011
+
+        TAUR_cloudy(IL)=TAUR(IL)!SIGR_cloudy*CRAY(IL)
+        
+
+
+
         r = RAER(IL)
         np = PARTICLES(IL)
-        TAUEXT(IL)=QEXT(I,IL)*PI*r*r*DALT(IL)*np*1.E+5 !gna - does this need correction for forward scatteirng?
+        TAUEXT(IL)=QEXT(I,IL)*PI*r*r*DALT(IL)*np*1.E+5
+
+        TAUEXT_cloudy(IL)=QEXT(I,IL)*PI*r*r*DALT(IL)*np*1.E+5
+
         TAUEXTID(IL) = 2*PI*r*r*DALT(IL)*np*1.E+5
-        TAUAS(IL)=OMG0A(I,IL)*TAUEXT(IL)
+
+        TAUEXTID_cloudy(IL)=2*PI*r*r*DALT(IL)*np*1.E+5
+
+        TAUAS(IL)=OMG0A(I,IL)*TAUEXT(IL) !For Each wavelegnth TAU is set and passed. TAUAS == [Tau per solar wave]
+
+        TAUAS_cloudy(IL) = OMG0A(I,IL)*TAUEXT_cloudy(IL)
+
         TAUS(IL)=TAUAS(IL)+TAUR(IL)
- 1165  CONTINUE
+         !TAUS(IL)=0.0 !JDW changed to look at Solar RT
+         !TAUS_cloudy(IL)=0.0 !JDW changed to look at Solar RT
+C        TAUS_cloudy(IL)=TAUAS_cloudy(IL)+TAUR_cloudy(IL)
+         TAUS_cloudy(IL)=TAUS(IL) !JDW changed in 2021 to test NSF plots
+
+
+
+
+1165  CONTINUE
 C
 
        IF (I.EQ.9) THEN
        TAUEXTTOTAL = 0.
        TAUASTOTAL = 0.
        DO IL=1,NLAYERS
-       TAUEXTTOTAL = TAUEXTTOTAL + TAUEXT(IL)
-       TAUASTOTAL = TAUASTOTAL + TAUAS(IL)
+         TAUEXTTOTAL = TAUEXTTOTAL + TAUEXT(IL)
+         TAUASTOTAL = TAUASTOTAL + TAUAS(IL)
+         TAUEXTTOTAL_cloudy = TAUEXTTOTAL + TAUEXT(IL)
+         TAUASTOTAL_cloudy = TAUASTOTAL + TAUAS_cloudy(IL)
        ENDDO
        !PRINT *, '***************************'
        !PRINT *, 'TAUEXTTOTALVIS'
@@ -277,6 +425,10 @@ C
        DO IL=1,NLAYERS
        TAUEXTTOTAL = TAUEXTTOTAL + TAUEXT(IL)
        TAUASTOTAL = TAUASTOTAL + TAUAS(IL)
+
+       TAUEXTTOTAL_cloudy = TAUEXTTOTAL + TAUEXT(IL) !Linear combination of cloudy and clear opd JDW 2021
+       TAUASTOTAL_cloudy = TAUASTOTAL + TAUAS_cloudy(IL)
+
        ENDDO
        ENDIF
 c   19   FORMAT(/1X,1PE10.4) !EWS - label not used
@@ -318,6 +470,8 @@ c   19   FORMAT(/1X,1PE10.4) !EWS - label not used
 
                 ABSCONT = self_absol(I,IL) + forn_absol(I,IL)
                 TAUCONTSOL(IL) = ABSCONT*CGAS(IL,6) !optical depth
+
+                TAUCONTSOL_cloudy(IL)=ABSCONT*CGAS(IL,6) !optical depth
 !                TAUCONTSOL(IL) = 0.0d0
               ENDDO  ! ENDS LAYER LOOP IN CONTINUUM
                  
@@ -373,7 +527,7 @@ c  Add the NO2 absorption in here. Scale everything to CH4.
              CGAS(IL,2) = AMAX1(CGAS(IL,2),1.E-20)
 
              TAUG(IL) = SIGNO2(I)*CGAS(IL,2)*FNO2/FCH4 * 2.687E24  ! c-rr Change CGAS CH4 number from 5 to 2. 3/19/2012
-             
+             TAUG_cloudy(IL)=SIGNO2(I)*CGAS(IL,2)*FNO2/FCH4 * 2.687E24 !JDW 
 c         IF (I .eq. 7) THEN
 c         PRINT 99923, IL, FNO2, TAUG(IL), SIGNO2(I)
 c         ENDIF
@@ -381,6 +535,7 @@ c 99923 FORMAT("in solar.f:",I5, 1P10E10.2) !EWS - label not used
      
             IF(I<22) THEN
             TAUG(IL)= TAUG(IL) + BETACH4(K3,I)*CGAS(IL,2) ! c-rr change gas CH4 number from 5 to 2. 3/19/2012
+            TAUG_cloudy(IL)=TAUG_cloudy(IL) + BETACH4(K3,I)*CGAS(IL,2) !JDW
             END IF           
             
          IF(I>21) THEN
@@ -461,6 +616,7 @@ C        Assumes Temp will never be lower than 112, log10(pressure) never lower 
         END SELECT
       END IF          
             TAUG(IL)= TAUG(IL) + ANEWBETA*CGAS(IL,2)  ! Change CH4 from 5 to 2
+            TAUG_cloudy(IL)=TAUG_cloudy(IL) + ANEWBETA*CGAS(IL,2)  ! Change CH4 from 5 to 2 JDW
 c            print 9999,TAUG(IL),ANEWBETA
 c            print 9998,TP,LOGP
 c           print 9999,AFT,pp
@@ -511,19 +667,47 @@ C
 !                         print *, BETAO3(I)*2.687E19, I, CGAS(IL,1)
 !                         pause
 !                         endif
+
+
+
+                        TAUG_cloudy(IL)=TAUG_cloudy(IL) + BETAH2O*CGAS(IL,6) 
+     &                 + BETAO3(I)*CGAS(IL,4) !JDW
+
+
                        ELSEIF(I.eq.15) THEN
                        TAUG(IL)= TAUG(IL) + BETACO2*CGAS(IL,5) + 
      &                 BETAH2O*CGAS(IL,6)
+                       TAUG_cloudy(IL)= TAUG_cloudy(IL) + BETACO2*CGAS(IL,5) + 
+     &                 BETAH2O*CGAS(IL,6) !JDW
+
+
+
+
                        ELSEIF(I.eq.16)THEN
                        TAUG(IL) = TAUG(IL) + BETACO2*CGAS(IL,5) + 
      &                 BETAH2O*CGAS(IL,6) + 
      &                 BETAO2(KO2)*CGAS(IL,3)
+      TAUG_cloudy(IL) = TAUG_cloudy(IL) + BETACO2*CGAS(IL,5) + 
+     &                 BETAH2O*CGAS_cloudy(IL,6) + 
+     &                 BETAO2(KO2)*CGAS(IL,3) !JDW
+
+
+
+
 !                          print *, BETAO2, IL, I
 !                          pause
                        ELSE ! For intervals 17-38
                        TAUG(IL)= TAUG(IL) + BETACO2*CGAS(IL,5) + 
      &                 BETAH2O*CGAS(IL,6)
-                       ENDIF
+                     TAUG_cloudy(IL)= TAUG_cloudy(IL) + BETACO2*CGAS(IL,5) + 
+     &                 BETAH2O*CGAS(IL,6) !Be Sure that each of these 'cloudy amtospheric columns are correct' JDW
+
+
+
+
+
+
+                        ENDIF
 
 !                       if((I.gt.17).and.(IL.eq.50))then
 !                        print *, 'CGASH2O=', CGAS(IL,6), 
@@ -532,6 +716,8 @@ C
 !                       print *, 'TAUG=', TAUG(IL)
 !                       pause
 !                       endif
+
+
  1182             CONTINUE
      
 !               IF (IG2.LE.4) THEN
@@ -557,6 +743,10 @@ c-rr 6/7/2011 near IR CO2 CIA section-------------------------------------------
                      TAUG(IL) = TAUG(IL) + 1.5E-9*(CGAS(IL,5)
      &                             /2.687E19)*FI(2,IL)*P(IL) ! Lochsmidt's value converts CGAS for CO2 from mol/cm^2 into atm-cm. The CIA values (i.e. 1.5E-9 are 
 !                                                                      in inverse amagat^2cm. So tau is unitless.
+                      TAUG_cloudy(IL) = TAUG_cloudy(IL) + 1.5E-9*(CGAS(IL,5)
+     &                             /2.687E19)*FI_cloudy(2,IL)*P(IL)
+
+
                      ENDDO
                   
 
@@ -564,14 +754,23 @@ c-rr 6/7/2011 near IR CO2 CIA section-------------------------------------------
                       DO IL = 1, NLAYERS
                         TAUG(IL) = TAUG(IL) + 0.57*6.0E-9*(CGAS(IL,5)
      &                            /2.687E19)*FI(2,IL)*P(IL)
+
+
+                        TAUG_cloudy(IL) = TAUG_cloudy(IL) + 0.57*6.0E-9*(CGAS(IL,5)
+     &                            /2.687E19)*FI_cloudy(2,IL)*P(IL) !JDW
                        ENDDO
 
                      ELSEIF(I.EQ.31) THEN ! Put CO2 CIA in 2.3 micron band
                      DO IL = 1, NLAYERS
                       TAUG(IL) = TAUG(IL) + 3.5E-8*(CGAS(IL,5)
      &                            /2.687E19)*FI(2,IL)*P(IL)
+
+
+                  TAUG_cloudy(IL) = TAUG_cloudy(IL) + 3.5E-8*(CGAS(IL,5)
+     &                            /2.687E19)*FI_cloudy(2,IL)*P(IL) !JDW
                      ENDDO
                      ENDIF
+
 !                     ENDIF        
 C------------------------------------------------------------------------------------------
                  
@@ -581,7 +780,7 @@ C-------------------------------------------------------------------------------
                     
                TAULAM(IL) = TAUEXT(IL)+TAUR(IL)+TAUG(IL) 
      &              + TAUCONTSOL(IL) ! Added tau for BPS continuum 8/28/2012
-           
+               TAULAM_cloudy(IL) = TAULAM(IL)
 !              if(TF(ND) > 2200.0d0)then
 !              print 9999, TAULAM(IL), TAUG(IL),CGAS(IL,2),CGAS(IL,3),
 !     &                    CGAS(IL,4), CGAS(IL,5),IL,K1,K2,I
@@ -593,26 +792,101 @@ C-------------------------------------------------------------------------------
 c 9999   format(1P6E12.5,3(2x,I3), 2x,1p3e12.5) !EWS - label not used
 c               TAULAM(IL) = AMIN1(TAULAM(IL),1000.)
                OMG0(IL) = TAUS(IL)/TAULAM(IL)
+               OMG0_cloudy(IL) = TAUS_cloudy(IL)/TAULAM_cloudy(IL) !JDW
 C
 C  Do not let scattering albedo be larger than 0.99999.
                   OMG0(IL) = AMIN1(OMG0(IL),0.99999)
 C
-
+                  OMG0_cloudy(IL)=AMIN1(OMG0_cloudy(IL),0.99999)
                   TSRAT = TAUAS(IL)/TAUS(IL)
-                  ASY(IL) = TSRAT*ASYA(I,IL)
+                  TSRAT_cloudy=TAUAS_cloudy(IL)/TAUS_cloudy(IL)
+                  ASY(IL) = TSRAT*ASYA(I,IL) !Here is where we set ASYEDDY !JDW
+
+
+                  ASY_cloudy(IL)=TSRAT*ASYA(I,IL) !Make sure ASYA can have cloudy. 
+                  !print*,'ASY(IL)',ASY(IL)
+
+
+
+                  OMG0_clear(IL)=OMG0(IL)
+                  ASY_clear(IL)=ASY(IL)
+                  TAULAM_clear(IL)=TAULAM(IL)
+
+                  ASYEDDY(IL)=eddyg0SOL(I,IL)
+                  OMG0EDDY(IL)=eddyw0SOL(I,IL)
+                  TAUEDDY(IL)=eddyopdSOL(I,IL)/1.   !JDW
+                  !TAUEDDY(1)=0.0
+                  !TAUEDDY(IL)=1.0
+                  OMG0_cloudy(IL)=OMG0_clear(IL)+OMG0EDDY(IL)
+                  ASY_cloudy(IL)=ASY_clear(IL)+ASYEDDY(IL)
+               
+                  TAULAM_cloudy(IL)=TAULAM_clear(IL)+TAUEDDY(IL)
+                 ! IF(TAULAM_cloudy(IL) .lt. 50.)then 
+                 !    TAULAM_cloudy(IL)=TAULAM_cloudy(IL)
+                 ! else 
+                 !    TAULAM_cloudy(IL)=100.
+                 ! endif
+
+                  !if(I.eq.20)then
+                  !   print*,'testing taue',TAUEDDY(IL)
+                  !endif
+                  OMG0_cloudy(IL)=AMIN1(OMG0_cloudy(IL),0.99999)
+
+                  !print*,'OMG0Eddy',OMG0EDDY(IL),IL
+
+
+
+
+
 C-AP                  FMT(IL) = TSRAT*FMA(I)
                   OMG0(IL) = AMAX1(OMG0(IL),1.E-5)! changed lower limit of single-scattering albedo to 1e-12 (default 1e-5) c-rr 4/30/2012
+                  OMG0_Cloudy(IL)=AMAX1(OMG0_cloudy(IL),1.E-5)
+                  OMG0_clear(IL)=AMAX1(OMG0_clear(IL),1.E-5)
+                  !if(I.eq.1) print*,'OMG0',OMG0_Cloudy(IL),OMG0_clear(IL),IL
  1200          CONTINUE
                COUNTERS = COUNTERS + 1
-               CALL DELTA2STR(SRFALB,AMU0,ASY,TAULAM,OMG0,FUP,FDN)
-C
+
+
+
+               do z=1,size(TAULAM) !Uncommented 04/06/2022 JDW
+                  ASY_cloudy(z)=AMIN1(ASY_cloudy(z),0.999999)
+                  ASY_cloudy(z)=AMAX1(ASY_cloudy(z),-0.999999)
+                  TAULAM_clear(z)=TAULAM(z)
+                  OMG0_clear(z)=OMG0(z)
+                  ASY_clear(z)=ASY(z)
+
+
+
+                  OMG0_clear(z) = AMAX1(OMG0_clear(z),1.E-5)
+                  OMG0_cloudy(z) = AMAX1(OMG0_cloudy(z),1.E-5)
+                  enddo
+                  !print*,OMG0_
+
+      CALL DELTA2STR(SRFALB,AMU0,ASY_cloudy,TAULAM_cloudy, !Breaks on this version.
+     & OMG0_cloudy,FUP_cloudy,FDN_cloudy) !JDW
+      !print*,'delta_cloudy' accomplished. 
+
+
+      CALL DELTA2STR(SRFALB,AMU0,ASY_clear,TAULAM_clear,
+     & OMG0_clear,FUP_clear,FDN_clear) !JDW
 
                SUMAP = SUMAP + AP
               
                J = 1
  1205          IF (J .LE. ND) THEN
-                  FUPA(J)=FUPA(J)+AP*FUP(J)
-                  FDNA(J)=FDNA(J)+AP*FDN(J)
+                  !FUPA(J)=FUPA(J)+AP*FUP(J)
+                  !FDNA(J)=FDNA(J)+AP*FDN(J)
+
+                  FUPA_cloudy(J)= FUPA_cloudy(J)
+     & +AP*FUP_cloudy(J)!JDW
+                  FDNA_cloudy(J)=FDNA_cloudy(J)
+     & +AP*FDN_cloudy(J)!JDW
+
+                  FUPA_clear(J)=FUPA_clear(J)
+     & +AP*FUP_clear(J) !JDW
+                  FDNA_clear(J)=FDNA_clear(J)
+     & +AP*FDN_clear(J) !JDW
+
 
 !                  print *, 'AP=',AP, 'FDN=',FDN(J),'FUP=', FUP(J)
 !                  pause
@@ -630,8 +904,18 @@ C
 !            print *, 'SUMAP=', SUMAP
             
          DO 1210 J=1,ND
-             FDNSOL(J)=FDNSOL(J)+SOLINT(I)*FDNA(J)
-             FUPSOL(J)=FUPSOL(J)+SOLINT(I)*FUPA(J)
+             !FDNSOL(J)=FDNSOL(J)+SOLINT(I)*FDNA(J)
+             !FUPSOL(J)=FUPSOL(J)+SOLINT(I)*FUPA(J)
+
+             FDNSOL_cloudy(J)=FDNSOL_cloudy(J)
+     & +SOLINT(I)*FDNA_cloudy(J) !JDW
+             FUPSOL_cloudy(J)=FUPSOL_cloudy(J)
+     & +SOLINT(I)*FUPA_cloudy(J) !JDW
+
+             FDNSOL_clear(J)=FDNSOL_clear(J)
+     & +SOLINT(I)*FDNA_clear(J)
+             FUPSOL_clear(J)=FUPSOL_clear(J)
+     & +SOLINT(I)*FUPA_clear(J)
              
              if (J.eq.1) then ! Print out fupsol and fdnsol to calculate planetary albedo per wavelength bin
                           write(93,*) FUPSOL(J), FDNSOL(J)
@@ -643,7 +927,8 @@ C-rr         PLAYING AROUND WITH FLUXES HERE
 c             IF ((I==26).and.(J==95)) THEN
 c             print *, 'FDNSOL=',FDNSOL(J),'FUPSOL=',FUPSOL(J)             
 c             ENDIF
-             Fdiff(J) = SOLINT(I)*(FDNA(J)-FUPA(J))
+             Fdiff(J) = SOLINT(I)*((1.-fcloud)*(FDNA_clear(J)-
+     & FUPA_clear(J))+fcloud*(FDNA_cloudy(J)-FUPA_cloudy(J)))   
 c              CPCO2 = 7.7 + 5.3E-3*TF(J) - 8.3E-7*TF(J)*TF(J) 
 c-rr              Putting new CPCO2 parametrization here. Why is there no FCH4?
 c              CPCO2 = 5.89 + 6.06E-3*TF(J) + 2.39E-5*TF(J)*TF(J) 

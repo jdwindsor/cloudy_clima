@@ -147,7 +147,7 @@ C
      & 6990 , 6390 , 5925 , 5370 , 4950 , 4540 , 4030 , 3760 , 3425 , 
      & 3087 , 2796 , 2494 , 2397 , 2200/ ! Solar intervals 9 - 38 have BPS water continuum. Converted to wavenumbers 8/31/2012
 
-
+      open(unit=2025,FILE= 'CLIMA/IO/05micron_opd.txt')
       ! open(unit=3021,FILE= DIRINOUT//'/solar_ASY_cloudy.tab')
       ! open(unit=3022,FILE= DIRINOUT//'/solar_ASY_clear.tab')
 
@@ -801,14 +801,14 @@ C     & TAUG_cloudy(IL) + TAUCONTSOL_cloudy(IL)
 c 9999   format(1P6E12.5,3(2x,I3), 2x,1p3e12.5) !EWS - label not used
 c               TAULAM(IL) = AMIN1(TAULAM(IL),1000.)
                OMG0(IL) = TAUS(IL)/TAULAM(IL)
-               OMG0_cloudy(IL) = TAUS_cloudy(IL)/TAULAM_cloudy(IL) !JDW
+               OMG0_cloudy(IL) = TAUS(IL)/TAULAM(IL) !JDW
 C
 C  Do not let scattering albedo be larger than 0.99999.
                   OMG0(IL) = AMIN1(OMG0(IL),0.99999)
 C
                   OMG0_cloudy(IL)=AMIN1(OMG0_cloudy(IL),0.99999)
                   TSRAT = TAUAS(IL)/TAUS(IL)
-                  TSRAT_cloudy=TAUAS_cloudy(IL)/TAUS_cloudy(IL)
+                  TSRAT_cloudy=TAUAS(IL)/TAUS(IL)
                   ASY(IL) = TSRAT*ASYA(I,IL) !Here is where we set ASYEDDY !JDW
 
 
@@ -918,6 +918,7 @@ C
       !print*,'pre delta 2',OMG0_cloudy-OMG0_clear
       !print*,'pre delta 3',TAULAM_cloudy-TAULAM_clear
       !TAULAM_cloudy=1.0
+
       CALL DELTA2STR(SRFALB,AMU0,ASY_cloudy,TAULAM_cloudy, !Breaks on this version.
      & OMG0_cloudy,FUP_cloudy,FDN_cloudy) !JDW
       !print*,'delta_cloudy' accomplished. 
@@ -1058,6 +1059,15 @@ C         .
 C         .
 C        ND
       !print*,FUPA_cloudy(1),ALAM(I),I
+
+      IF(I .eq. 8 )then !JDW uncomment when needing cumulative optical depths
+         write(2025,*)'OPTICAL DEPTHS AT 0.58 microns'
+         write(2025,*)'TAULAM_cloudy ','TAULAM_clear', 'N layer'
+         do J=1,NLAYERS
+            write(2025,*)TAULAM_cloudy(J),TAULAM_clear(J),J
+         enddo
+      endif
+
  1155 CONTINUE                   !**END WAVELENGTH LOOP**
 
         IF (LAST .EQ. 1) THEN       

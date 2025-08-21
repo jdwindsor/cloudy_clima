@@ -155,7 +155,7 @@ c-jdh Ethane k-coefficient weights
 
        INTEGER COUNTERIR
 
-       
+       open(unit=2024,FILE= 'CLIMA/IO/10micron_opd.txt')
        COUNTERIR = 0
        SRFALBIR = 0.
        NLAYERS = ND - 1    
@@ -1320,6 +1320,16 @@ C        DO J=1,NLAYERS
 C        PRINT 19, TRANSLAYER(J)
 C         TAUTOTAL(I) = TAUTOTAL(I) - log(TRANSLAYER(J))
 C        ENDDO
+
+      IF(I .eq. 42 )then !JDW uncomment when needing cumulative optical depths
+         write(2024,*)'OPTICAL DEPTHS AT 10.0 microns'
+         write(2024,*)'TAULAMIR_cloudy ','TAULAMIR_clear', 'N layer'
+         do J=1,NLAYERS
+            write(2024,*)TAULAMIR_cloudy(J),TAULAMIR_clear(J),J
+         enddo
+      endif
+
+
    1     CONTINUE                   !**END LOOP over frequency**
 
           write(6969,*)
